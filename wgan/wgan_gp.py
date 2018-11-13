@@ -23,11 +23,13 @@ class Discriminator(nn.Module):
 		self.model = nn.Sequential(
 			# (32 - kernel_size + 2 * padding) / stride + 1
 			# (32 - 4 + 2) / 2 + 1 = 16
-			# (3, 32, 32) -> (DIM, )
+			# (3, 32, 32) -> (DIM, 16, 16)
 			nn.Conv2d(3, DIM, 4, stride=2, padding=1),
 			nn.LeakyReLU(),
+			# (DIM, 16, 16) -> (DIM * 2, 8, 8)
 			nn.Conv2d(DIM, DIM * 2, 4, stride=2, padding=1),
 			nn.LeakyReLU(),
+			# (DIM * 2, 8, 8) -> (DIM * 4, 4, 4)
 			nn.Conv2d(DIM * 2, DIM * 4, 4, stride=2, padding=1),
 			nn.LeakyReLU(),
 		)
