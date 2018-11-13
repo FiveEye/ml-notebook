@@ -19,7 +19,7 @@ class Discriminator(nn.Module):
 		super(Discriminator, self).__init__()
 		self.model = nn.Sequential(
 			# (32 - kernel_size + 2 * padding) / stride + 1
-			# (32 - 3 + 2) / 2 + 1 = 16??
+			# (32 - 4 + 2) / 2 + 1 = 16
 			# (3, 32, 32) -> (DIM, )
 			nn.Conv2d(3, DIM, 4, stride=2, padding=1),
 			nn.LeakyReLU(),
