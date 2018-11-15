@@ -33,7 +33,8 @@ class Mnist:
         return items()
 
 class CIFAR10_iter(object):
-    def __init__(self):
+    def __init__(self, batch_size):
+        self.batch_size = batch_size
         transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
@@ -46,9 +47,9 @@ class CIFAR10_iter(object):
         return next(self.iter)
     def infinit_items(self):
         while True:
-            trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+            trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=self.batch_size, shuffle=True, num_workers=0)
             for images, labels in trainloader:
-                if labels.size()[0] < BATCH_SIZE:
+                if labels.size()[0] < self.batch_size:
                     break
                 yield images, labels
 
@@ -119,7 +120,9 @@ class RouteCapsule(nn.Module):
 class CapsNet(nn.Module):
     def __init__(self):
         super(CapsNet, self).__init__()
+        self.init_mnist()
         
+    def init_mnist(self):        
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=9, stride=1)
         
         self.primary_caps = PrimaryCapsule(in_channels=256, out_channels=32, out_cap_dim=8, kernel_size=9, stride=2)
@@ -137,7 +140,10 @@ class CapsNet(nn.Module):
         
         self.reconstruction_loss = nn.MSELoss(reduction='sum')
         #self.reconstruction_loss = nn.MSELoss()
-
+    def init_cifar(self):
+        return
+        
+    
     def forward(self, x, y = None):
         x = F.relu(self.conv1(x))
         x = self.primary_caps(x)
@@ -195,7 +201,8 @@ def save_img(images):
 if __name__ == "__main__":
     mnist = Mnist(BATCH_SIZE)
     model = CapsNet()
-    model.load_model()
+    if os.path.exists(model_path):
+        model.load_model()
     model.cuda()
     #summary(model,input_size=(1,28,28))
     optimizer = optim.Adam(model.parameters())
@@ -228,17 +235,18 @@ if __name__ == "__main__":
                 print("w.min:", model.digit_caps.route_w.min())
         print("train_loss:", train_loss / len(mnist.train_loader))
         save_img(reconstructions)
+        save_img(images)
         model.save_model()
         
         model.eval()
         test_loss = 0.0
-        for i, (data, target) in enumerate(mnist.test_loader):
-            target = torch.eye(10).index_select(dim=0, index=target)
-            data, target = Variable(data), Variable(target)
-            data, target = data.cuda(), target.cuda()
+        for i, (images, labels) in enumerate(mnist.test_loader):
+            labels = torch.eye(10).index_select(dim=0, index=labels)
+            images, labels = Variable(images), Variable(labels)
+            images, labels = images.cuda(), labels.cuda()
 
-            output, reconstructions = model(data)
-            loss = model.loss(data, target, output, reconstructions)
+            output, reconstructions = model(images)
+            loss = model.loss(images, labels, output, reconstructions)
             test_loss += loss.data.cpu().numpy()
             if i % 100 == 0:
                 print("test accuracy:", sum(np.argmax(output.data.cpu().numpy(), 1) == np.argmax(labels.data.cpu().numpy(), 1)) / float(labels.size(0)))
