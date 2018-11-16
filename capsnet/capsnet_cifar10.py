@@ -57,6 +57,45 @@ class CIFAR10(object):
         images = images.view(images.size(0),3,32,32).data.cpu()[:64]
         return images
 
+LATENT_DIM = 160
+DIM = 128
+        
+class Generator(nn.Module):
+    def __init__(self):
+        super(Generator, self).__init__()
+        # latent vector LATENT_DIM -> (DIM*4,4,4)
+        self.block1 = nn.Sequential(
+            nn.Linear(LATENT_DIM, DIM * 64),
+            nn.BatchNorm1d(DIM * 64),
+            nn.ReLU(True),
+        )
+        
+        # (DIM*4,4,4) -> (DIM*2,8,8)
+        self.block2 = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=4 * DIM, out_channels=2 * DIM, kernel_size=2, stride=2),
+            nn.BatchNorm2d(2 * DIM),
+            nn.ReLU(True),
+        )
+        
+        # (DIM*2,8,8) -> (DIM,16,16)
+        self.block3 = nn.Sequential(
+            nn.ConvTranspose2d(2 * DIM, DIM, 2, stride=2),
+            nn.BatchNorm2d(DIM),
+            nn.ReLU(True),
+        )
+        
+        # (DIM,16,16) -> (3,32,32)
+        self.block4 = nn.Sequential(
+            nn.ConvTranspose2d(DIM, 3, 2, stride=2),
+            nn.Tanh(),
+        )
+    def forward(self, input):
+        output = self.block1(input)
+        output = output.view(output.size(0), DIM * 4, 4, 4)
+        output = self.block2(output)
+        output = self.block3(output)
+        output = self.block4(output)
+        return output
         
 
 def squash(tensor):
@@ -136,14 +175,7 @@ class CapsNet(nn.Module):
         
         self.digit_caps = RouteCapsule(in_cap_num=32*6*6, in_cap_dim=8, out_cap_num=NUM_LABELS, out_cap_dim=16, num_iter=3)
         
-        self.decoder = nn.Sequential(
-            nn.Linear(16 * NUM_LABELS, 512),
-            nn.ReLU(inplace=True),
-            nn.Linear(512, 1024),
-            nn.ReLU(inplace=True),
-            nn.Linear(1024, 784),
-            nn.Sigmoid()
-        )
+        self.decoder = Generator()
         
         self.reconstruction_loss = nn.MSELoss(reduction='sum')
         #self.reconstruction_loss = nn.MSELoss()
@@ -163,7 +195,7 @@ class CapsNet(nn.Module):
             nn.Sigmoid()
         )
         self.reconstruction_loss = nn.MSELoss(reduction='sum')
-        
+        #self.reconstruction_loss = nn.MSELoss()
     
     def forward(self, x, y = None):
         x = F.relu(self.conv1(x))
@@ -213,12 +245,24 @@ class CapsNet(nn.Module):
 if __name__ == "__main__":
     #dataset = Mnist(BATCH_SIZE)
     dataset = CIFAR10(BATCH_SIZE)
+    print("batch_num:", len(dataset.train_loader), len(dataset.test_loader))
     model = CapsNet()
     if os.path.exists(model_path):
         model.load_model()
     model.cuda()
     #summary(model,input_size=(1,28,28))
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(
+        model.parameters(), 
+        lr = 0.0001, 
+        #betas=(0, 0.9), 
+        #weight_decay=0.01,
+    )
+    optimizer_decoder = optim.Adam(
+        model.decoder.parameters(), 
+        lr = 0.001, 
+        #betas=(0, 0.9), 
+        #weight_decay=0.01,
+    )
     n_epochs = 500
     for epoch in range(n_epochs):
         print("epoch:", epoch)
@@ -233,26 +277,29 @@ if __name__ == "__main__":
             pred_labels, reconstructions = model(images, labels)
             loss = model.loss(images, labels, pred_labels, reconstructions)
             loss.backward()
+            optimizer_decoder.step()
             optimizer.step()
             
             loss = loss.data.cpu().numpy()
             train_loss += loss
             
-            if i % 100 == 0:
+            if (i+1) % 125 == 0:
                 print("i:", i, "loss:", loss)
                 print("pred_labels:", pred_labels.data[0].cpu().numpy())
                 print("real_label:", labels.data[0].cpu().numpy())
                 print("train accuracy:", sum(np.argmax(pred_labels.data.cpu().numpy(), 1) == np.argmax(labels.data.cpu().numpy(), 1)) / float(labels.size(0)))
-                print("w.max:", model.digit_caps.route_w.max())
-                print("w.min:", model.digit_caps.route_w.min())
-                save_img(dataset.before_save_img(reconstructions))
-                save_img(dataset.before_save_img(images))
+                
+        save_img(dataset.before_save_img(reconstructions))
+        save_img(dataset.before_save_img(images))
         print("train_loss:", train_loss / len(dataset.train_loader))
+        print("w.max:", model.digit_caps.route_w.max())
+        print("w.min:", model.digit_caps.route_w.min())
         
         model.save_model()
         
         model.eval()
         test_loss = 0.0
+        test_acc = 0.0
         for i, (images, labels) in enumerate(dataset.test_loader):
             labels = torch.eye(NUM_LABELS).index_select(dim=0, index=labels)
             images, labels = Variable(images), Variable(labels)
@@ -261,8 +308,12 @@ if __name__ == "__main__":
             output, reconstructions = model(images)
             loss = model.loss(images, labels, output, reconstructions)
             test_loss += loss.data.cpu().numpy()
+            test_acc += sum(np.argmax(output.data.cpu().numpy(), 1) == np.argmax(labels.data.cpu().numpy(), 1)) / float(labels.size(0))
             if i % 100 == 0:
-                print("test accuracy:", sum(np.argmax(output.data.cpu().numpy(), 1) == np.argmax(labels.data.cpu().numpy(), 1)) / float(labels.size(0)))
+                save_img(dataset.before_save_img(reconstructions))
+                save_img(dataset.before_save_img(images))
+                #print("test accuracy:", sum(np.argmax(output.data.cpu().numpy(), 1) == np.argmax(labels.data.cpu().numpy(), 1)) / float(labels.size(0)))
 
         print("test_loss:", test_loss / len(dataset.test_loader))
+        print("test_acc:", test_acc / len(dataset.test_loader))
     
