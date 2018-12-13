@@ -46,22 +46,22 @@ class Generator(nn.Module):
 		self.block1 = nn.Sequential(
 			nn.Linear(LATENT_DIM, DIM * 64),
 			nn.BatchNorm1d(DIM * 64),
-            nn.ReLU(True),
-        )
+			nn.ReLU(True),
+		)
 		
 		# (DIM*4,4,4) -> (DIM*2,8,8)
 		self.block2 = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=4 * DIM, out_channels=2 * DIM, kernel_size=2, stride=2),
-            nn.BatchNorm2d(2 * DIM),
-            nn.ReLU(True),
-        )
+			nn.ConvTranspose2d(in_channels=4 * DIM, out_channels=2 * DIM, kernel_size=2, stride=2),
+			nn.BatchNorm2d(2 * DIM),
+			nn.ReLU(True),
+		)
 		
 		# (DIM*2,8,8) -> (DIM,16,16)
 		self.block3 = nn.Sequential(
-            nn.ConvTranspose2d(2 * DIM, DIM, 2, stride=2),
-            nn.BatchNorm2d(DIM),
-            nn.ReLU(True),
-        )
+		nn.ConvTranspose2d(2 * DIM, DIM, 2, stride=2),
+		nn.BatchNorm2d(DIM),
+		nn.ReLU(True),
+	)
 		
 		# (DIM,16,16) -> (3,32,32)
 		self.block4 = nn.Sequential(
