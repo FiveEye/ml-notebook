@@ -4,6 +4,8 @@
 
 ## Deep Learning with Python
 
+## Hands-On Machine Learning with Scikit-Learn & TensorFlow
+
 ## GAN
 
 ### WGAN
